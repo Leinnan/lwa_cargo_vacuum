@@ -1,4 +1,5 @@
-# lwa_cargo_vacuum [![build](https://github.com/Leinnan/lwa_cargo_vacuum/actions/workflows/rust.yml/badge.svg)](https://github.com/Leinnan/lwa_cargo_vacuum/actions/workflows/rust.yml)
+# lwa_cargo_vacuum
+
  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![crates.io](https://img.shields.io/crates/v/lwa_cargo_vacuum.svg)](https://crates.io/crates/lwa_cargo_vacuum)
 [![crates.io](https://img.shields.io/crates/d/lwa_cargo_vacuum.svg)](https://crates.io/crates/lwa_cargo_vacuum)
