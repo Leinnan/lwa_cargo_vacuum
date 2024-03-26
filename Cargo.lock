@@ -78,17 +78,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ff69b9dd49fd426c69a0db9fc04dd934cdb6645ff000864d98f7e2af8830eaa"
 
 [[package]]
-name = "cargo_vacuum"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clap",
- "dpc-pariter",
- "fs_extra",
- "walkdir",
-]
-
-[[package]]
 name = "cc"
 version = "1.0.90"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -292,6 +281,17 @@ name = "log"
 version = "0.4.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
+
+[[package]]
+name = "lwa_cargo_vacuum"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "dpc-pariter",
+ "fs_extra",
+ "walkdir",
+]
 
 [[package]]
 name = "num-traits"
