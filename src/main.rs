@@ -1,6 +1,6 @@
 use std::{
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
 
@@ -71,7 +71,7 @@ fn main() {
             has_cargo
         })
         .parallel_map(|e| BuildedProject {
-            path: e.path().to_path_buf(),
+            path: Path::new(e.path()).join("target"),
             size: fs_extra::dir::get_size(e.path()).unwrap_or(0) / (1024 * 1024),
             last_modified: e.metadata().unwrap().modified().unwrap(),
         })
