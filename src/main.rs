@@ -1,13 +1,13 @@
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::PathBuf,
     time::{Duration, SystemTime},
 };
 
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use dpc_pariter::IteratorExt;
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
 #[derive(Parser)]
 #[command(version, about, long_about = Some("Simple CLI tool for cleaning up old target folders. By default just lists founded directories, use remove flag to remove founded directories."))]
@@ -35,6 +35,46 @@ pub struct BuildedProject {
     pub last_modified: std::time::SystemTime,
 }
 
+impl BuildedProject {
+    pub fn new(path: PathBuf) -> Self {
+        BuildedProject {
+            path: path.clone(),
+            size: fs_extra::dir::get_size(path.clone()).unwrap_or(0) / (1024 * 1024),
+            last_modified: fs::metadata(path).unwrap().modified().unwrap(),
+        }
+    }
+
+    pub fn check_at_path(entry: &DirEntry) -> Option<Self> {
+        if fs::read_dir(entry.path()).is_err() {
+            return None;
+        };
+        let entry = entry.path();
+        let has_cargo = entry.join("Cargo.toml").exists();
+        if has_cargo {
+            let result = if entry.join("target").exists() {
+                Some(BuildedProject::new(entry.join("target")))
+            } else {
+                None
+            };
+            return result;
+        }
+        let is_unity_project = entry
+            .join("ProjectSettings")
+            .join("ProjectSettings.asset")
+            .exists();
+        if is_unity_project {
+            let result = if entry.join("Library").exists() {
+                Some(BuildedProject::new(entry.join("Library")))
+            } else {
+                None
+            };
+            return result;
+        }
+
+        None
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
     let min_size = cli.minimal_size.unwrap_or(1);
@@ -47,34 +87,9 @@ fn main() {
         .into_iter()
         .parallel_filter(|entry| entry.is_ok())
         .parallel_map(|e| e.unwrap())
-        .parallel_filter(|entry| {
-            let Ok(dir_entries) = fs::read_dir(entry.path()) else {
-                return false;
-            };
-            let has_target = dir_entries.into_iter().any(|e| {
-                let Ok(entry) = e else {
-                    return false;
-                };
-                return entry.file_type().unwrap().is_dir()
-                    && entry.file_name().to_str().eq(&Some("target"));
-            });
-            if !has_target {
-                return false;
-            }
-            let has_cargo = fs::read_dir(entry.path()).unwrap().any(|e| {
-                let Ok(entry) = e else {
-                    return false;
-                };
-                return entry.file_type().unwrap().is_file()
-                    && entry.file_name().to_str().eq(&Some("Cargo.toml"));
-            });
-            has_cargo
-        })
-        .parallel_map(|e| BuildedProject {
-            path: Path::new(e.path()).join("target"),
-            size: fs_extra::dir::get_size(e.path()).unwrap_or(0) / (1024 * 1024),
-            last_modified: e.metadata().unwrap().modified().unwrap(),
-        })
+        .parallel_map(|e| BuildedProject::check_at_path(&e))
+        .parallel_filter(|entry| entry.is_some())
+        .parallel_map(|e| e.unwrap())
         .parallel_filter(move |proj| proj.size > min_size && proj.last_modified < max_time)
         .collect();
     projects.sort_by(|a, b| b.size.cmp(&a.size));
