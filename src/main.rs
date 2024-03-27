@@ -10,14 +10,14 @@ use dpc_pariter::IteratorExt;
 use walkdir::WalkDir;
 
 #[derive(Parser)]
-#[command(version, about, long_about = Some("Simple CLI tool for cleaning up old target folders"))]
+#[command(version, about, long_about = Some("Simple CLI tool for cleaning up old target folders. By default just lists founded directories, use remove flag to remove founded directories."))]
 struct Cli {
     /// directories search depth
     #[arg(short, long)]
     depth: Option<usize>,
     /// Relative path to operate on
     path: Option<String>,
-    /// Minimal size in MB
+    /// Minimal size of target folder in MB
     #[arg(long)]
     minimal_size: Option<u64>,
     /// Minimal time since last edit in hours

@@ -6,6 +6,8 @@
 
 Simple CLI tool for cleaning up old target folders.
 
+By default just lists founded directories, use remove flag to remove founded directories.
+
 ```bash
 Simple CLI tool for cleaning up old target folders
 
