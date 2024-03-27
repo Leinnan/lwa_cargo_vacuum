@@ -4,7 +4,9 @@
 [![crates.io](https://img.shields.io/crates/v/lwa_cargo_vacuum.svg)](https://crates.io/crates/lwa_cargo_vacuum)
 [![crates.io](https://img.shields.io/crates/d/lwa_cargo_vacuum.svg)](https://crates.io/crates/lwa_cargo_vacuum)
 
-Simple CLI tool for cleaning up old target folders.
+Simple CLI tool for cleaning up old target folders. 
+
+Finds artefacts from Rust and Unity game engine projects.
 
 By default just lists founded directories, use remove flag to remove founded directories.
 

@@ -1,6 +1,6 @@
 use std::{
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
 
@@ -28,6 +28,31 @@ struct Cli {
     remove: bool,
 }
 
+/// Finds last modified directory entry
+fn get_last_modified_entry(dir_path: &Path) -> Option<fs::DirEntry> {
+    let mut last_modified_entry: Option<fs::DirEntry> = None;
+    let mut last_modified_time: Option<std::time::SystemTime> = None;
+    let Ok(entries) = fs::read_dir(dir_path) else {
+        return None;
+    };
+    for entry in entries.flatten() {
+        let metadata = entry.metadata().unwrap();
+        let modified_time = metadata.modified().unwrap();
+
+        let Some(last_time) = last_modified_time else {
+            last_modified_time = Some(modified_time);
+            last_modified_entry = Some(entry);
+            continue;
+        };
+        if modified_time > last_time {
+            last_modified_time = Some(modified_time);
+            last_modified_entry = Some(entry);
+        }
+    }
+
+    last_modified_entry
+}
+
 #[derive(Debug)]
 pub struct BuildedProject {
     pub path: PathBuf,
@@ -37,10 +62,15 @@ pub struct BuildedProject {
 
 impl BuildedProject {
     pub fn new(path: PathBuf) -> Self {
+        let last_modified = match get_last_modified_entry(&path) {
+            Some(e) => fs::metadata(e.path()).unwrap().modified().unwrap(),
+            None => fs::metadata(path.clone()).unwrap().modified().unwrap(),
+        };
+
         BuildedProject {
             path: path.clone(),
             size: fs_extra::dir::get_size(path.clone()).unwrap_or(0) / (1024 * 1024),
-            last_modified: fs::metadata(path).unwrap().modified().unwrap(),
+            last_modified,
         }
     }
 
