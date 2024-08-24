@@ -1,13 +1,85 @@
 use std::{
-    fs,
-    path::{Path, PathBuf},
+    fs, io,
     time::{Duration, SystemTime},
 };
 
+use anyhow::Context;
+use built_project::BuiltProject;
 use chrono::{DateTime, Utc};
 use clap::Parser;
-use dpc_pariter::IteratorExt;
-use walkdir::{DirEntry, WalkDir};
+use walkdir::WalkDir;
+
+mod built_project;
+
+fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+    let min_size = cli.minimal_size.unwrap_or(1);
+
+    let max_time =
+        SystemTime::now() - Duration::from_secs(cli.time_since_edit.unwrap_or(0) * 60 * 60);
+    let path = cli.path.unwrap_or_else(|| ".".to_owned());
+
+    let mut projects = WalkDir::new(path)
+        .max_depth(cli.depth.unwrap_or(1))
+        .into_iter()
+        .filter_map(std::result::Result::ok)
+        .filter_map(|entry| {
+            BuiltProject::check_at_path(&entry)
+                .context("Failed to check at path")
+                .ok()
+                .flatten()
+        })
+        .filter(|proj| proj.size > min_size && proj.last_modified < max_time)
+        .collect::<Vec<BuiltProject>>();
+
+    projects.sort_by(|a, b| b.size.cmp(&a.size));
+
+    if projects.is_empty() {
+        println!("No matching folders found, returning");
+        return Ok(());
+    }
+
+    println!("{} projects:", projects.len());
+    for p in &projects {
+        let datetime: DateTime<Utc> = p.last_modified.into();
+        println!(
+            "\t\"{}\": {} MB, {}",
+            &p.path
+                .to_str()
+                .context("Could not convert path to String")?,
+            p.size,
+            datetime.format("%Y-%m-%d %H:%M:%S")
+        );
+    }
+
+    if cli.remove {
+        let failed_to_remove_projects: Vec<(BuiltProject, io::Error)> = projects
+            .into_iter()
+            .filter_map(|proj| {
+                if let Err(e) = fs::remove_dir_all(&proj.path) {
+                    Some((proj, e))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if failed_to_remove_projects.is_empty() {
+            println!("Projects removed!");
+        } else {
+            eprintln!("Failed to remove the following projects:");
+            for (proj, error) in failed_to_remove_projects {
+                eprintln!(
+                    "\tProject at {} failed with error: {}",
+                    proj.path.display(),
+                    error
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
 
 #[derive(Parser)]
 #[command(version, about, long_about = Some("Simple CLI tool for cleaning up old target folders. By default just lists founded directories, use remove flag to remove founded directories."))]
@@ -26,129 +98,4 @@ struct Cli {
     /// removes target dirs matching requirements
     #[arg(short, long)]
     remove: bool,
-}
-
-/// Finds last modified directory entry
-fn get_last_modified_entry(dir_path: &Path) -> Option<fs::DirEntry> {
-    let mut last_modified_entry: Option<fs::DirEntry> = None;
-    let mut last_modified_time: Option<std::time::SystemTime> = None;
-    let Ok(entries) = fs::read_dir(dir_path) else {
-        return None;
-    };
-    for entry in entries.flatten() {
-        let metadata = entry.metadata().unwrap();
-        let modified_time = metadata.modified().unwrap();
-
-        let Some(last_time) = last_modified_time else {
-            last_modified_time = Some(modified_time);
-            last_modified_entry = Some(entry);
-            continue;
-        };
-        if modified_time > last_time {
-            last_modified_time = Some(modified_time);
-            last_modified_entry = Some(entry);
-        }
-    }
-
-    last_modified_entry
-}
-
-#[derive(Debug)]
-pub struct BuildedProject {
-    pub path: PathBuf,
-    pub size: u64,
-    pub last_modified: std::time::SystemTime,
-}
-
-impl BuildedProject {
-    pub fn new(path: PathBuf) -> Self {
-        let last_modified = match get_last_modified_entry(&path) {
-            Some(e) => fs::metadata(e.path()).unwrap().modified().unwrap(),
-            None => fs::metadata(path.clone()).unwrap().modified().unwrap(),
-        };
-
-        BuildedProject {
-            path: path.clone(),
-            size: fs_extra::dir::get_size(path.clone()).unwrap_or(0) / (1024 * 1024),
-            last_modified,
-        }
-    }
-
-    pub fn check_at_path(entry: &DirEntry) -> Option<Self> {
-        if fs::read_dir(entry.path()).is_err() {
-            return None;
-        };
-        let entry = entry.path();
-        let has_cargo = entry.join("Cargo.toml").exists();
-        if has_cargo {
-            let result = if entry.join("target").exists() {
-                Some(BuildedProject::new(entry.join("target")))
-            } else {
-                None
-            };
-            return result;
-        }
-        let is_unity_project = entry
-            .join("ProjectSettings")
-            .join("ProjectSettings.asset")
-            .exists();
-        if is_unity_project {
-            let result = if entry.join("Library").exists() {
-                Some(BuildedProject::new(entry.join("Library")))
-            } else {
-                None
-            };
-            return result;
-        }
-
-        None
-    }
-}
-
-fn main() {
-    let cli = Cli::parse();
-    let min_size = cli.minimal_size.unwrap_or(1);
-
-    let max_time =
-        SystemTime::now() - Duration::from_secs(cli.time_since_edit.unwrap_or(0) * 60 * 60);
-    let path = cli.path.unwrap_or(".".to_owned());
-    let mut projects: Vec<BuildedProject> = WalkDir::new(path)
-        .max_depth(cli.depth.unwrap_or(1))
-        .into_iter()
-        .parallel_filter(|entry| entry.is_ok())
-        .parallel_map(|e| e.unwrap())
-        .parallel_map(|e| BuildedProject::check_at_path(&e))
-        .parallel_filter(|entry| entry.is_some())
-        .parallel_map(|e| e.unwrap())
-        .parallel_filter(move |proj| proj.size > min_size && proj.last_modified < max_time)
-        .collect();
-    projects.sort_by(|a, b| b.size.cmp(&a.size));
-    if projects.is_empty() {
-        println!("No matching folders found, returning");
-        return;
-    }
-    println!("{} projects:", projects.len());
-    for p in &projects {
-        let datetime: DateTime<Utc> = p.last_modified.into();
-        println!(
-            "\t\"{}\": {} MB, {}",
-            &p.path.to_str().unwrap(),
-            p.size,
-            datetime.format("%Y-%m-%d %H:%M:%S")
-        );
-    }
-    if cli.remove {
-        let failed_to_remove_projects: Vec<BuildedProject> = projects
-            .into_iter()
-            .parallel_filter(|e| fs::remove_dir_all(&e.path).is_err())
-            .collect();
-        if !failed_to_remove_projects.is_empty() {
-            eprintln!(
-                "Failed to remove projects! \n\t{:?}",
-                failed_to_remove_projects
-            );
-        } else {
-            println!("Projects removed!");
-        }
-    }
 }
